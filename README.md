@@ -5,6 +5,7 @@ A backend feature-flag / remote-config service, built incrementally as a daily p
 ## Current features
 
 - In-memory flag store: `Create`, `Get`, `Set`, `Delete`, `List`, `IsEnabled`
+- Percentage-based rollouts: `SetRollout` + `IsEnabledFor(key, userID)` gives consistent per-user results
 
 ## Usage
 
@@ -15,6 +16,10 @@ store.IsEnabled("new-checkout") // false
 
 store.Set("new-checkout", true)
 store.IsEnabled("new-checkout") // true
+
+// Roll out to 25% of users, consistently per user ID
+store.SetRollout("new-checkout", 25)
+store.IsEnabledFor("new-checkout", "user-42")
 ```
 
 ## Run the demo

@@ -3,7 +3,7 @@
 Incremental features, roughly in order. Pick the next unchecked item each session.
 
 - [x] Day 1: In-memory flag store with Create/Get/Set/Delete/List + IsEnabled
-- [ ] Percentage-based rollouts (flag enabled for X% of evaluations, consistent per user ID)
+- [x] Percentage-based rollouts (flag enabled for X% of evaluations, consistent per user ID)
 - [ ] Targeting rules (enable for specific user IDs / attributes, e.g. email domain)
 - [ ] Multi-environment support (dev/staging/prod have independent flag states)
 - [ ] Persistence: swap in-memory store for SQLite
@@ -25,3 +25,4 @@ Incremental features, roughly in order. Pick the next unchecked item each sessio
 ## Done
 
 - Day 1 (2026-10-22): scaffolded repo, in-memory flag store with CRUD + evaluation.
+- Day 2 (2026-10-22): percentage-based rollouts — `Flag.Rollout` (default 100), `SetRollout`, and deterministic per-user `IsEnabledFor` using an FNV hash of flag key + user ID (stable, monotonic as the percentage grows). `IsEnabled` is now true only for full rollouts.
