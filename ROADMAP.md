@@ -4,7 +4,7 @@ Incremental features, roughly in order. Pick the next unchecked item each sessio
 
 - [x] Day 1: In-memory flag store with Create/Get/Set/Delete/List + IsEnabled
 - [x] Percentage-based rollouts (flag enabled for X% of evaluations, consistent per user ID)
-- [ ] Targeting rules (enable for specific user IDs / attributes, e.g. email domain)
+- [x] Targeting rules (enable for specific user IDs / attributes, e.g. email domain)
 - [ ] Multi-environment support (dev/staging/prod have independent flag states)
 - [ ] Persistence: swap in-memory store for SQLite
 - [ ] HTTP API: CRUD endpoints for flags + an evaluation endpoint
@@ -26,3 +26,4 @@ Incremental features, roughly in order. Pick the next unchecked item each sessio
 
 - Day 1 (2026-10-22): scaffolded repo, in-memory flag store with CRUD + evaluation.
 - Day 2 (2026-10-22): percentage-based rollouts — `Flag.Rollout` (default 100), `SetRollout`, and deterministic per-user `IsEnabledFor` using an FNV hash of flag key + user ID (stable, monotonic as the percentage grows). `IsEnabled` is now true only for full rollouts.
+- Day 3 (2026-10-27): targeting rules — `Rule` (attribute + operator `equals`/`ends_with`/`starts_with`/`contains` + values), `AddRule`/`ClearRules`, and `Evaluate(key, Context{UserID, Attributes})`. A matching rule turns an enabled flag on regardless of rollout (e.g. email domain, user ID allow-list); otherwise the percentage rollout applies. `IsEnabledFor` now delegates to `Evaluate`.

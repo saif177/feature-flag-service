@@ -18,6 +18,7 @@ type Flag struct {
 	Key     string
 	Enabled bool
 	Rollout int
+	Rules   []Rule
 }
 
 // Store is a thread-safe in-memory flag store.
@@ -124,13 +125,10 @@ func (s *Store) SetRollout(key string, percent int) error {
 // IsEnabledFor evaluates a flag for a specific user. The result is
 // deterministic: the same flag and user ID always yield the same answer, and
 // raising the rollout percentage never turns the flag off for a user who
-// already had it. Unknown or disabled flags are off.
+// already had it. Unknown or disabled flags are off. Targeting rules that
+// depend on attributes are evaluated via Evaluate.
 func (s *Store) IsEnabledFor(key, userID string) bool {
-	f, err := s.Get(key)
-	if err != nil || !f.Enabled {
-		return false
-	}
-	return inRollout(f.Key, userID, f.Rollout)
+	return s.Evaluate(key, Context{UserID: userID})
 }
 
 // inRollout buckets (key, userID) into 0-99 and checks it against percent.
