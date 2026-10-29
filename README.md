@@ -7,6 +7,7 @@ A backend feature-flag / remote-config service, built incrementally as a daily p
 - In-memory flag store: `Create`, `Get`, `Set`, `Delete`, `List`, `IsEnabled`
 - Percentage-based rollouts: `SetRollout` + `IsEnabledFor(key, userID)` gives consistent per-user results
 - Targeting rules: `AddRule` with `equals`/`ends_with`/`starts_with`/`contains` on user ID or arbitrary attributes (e.g. email domain), evaluated via `Evaluate(key, Context{...})`
+- Multi-environment: `NewEnvironments()` gives independent dev/staging/prod stores; `Promote` copies a flag between them
 
 ## Usage
 
@@ -25,6 +26,12 @@ store.IsEnabledFor("new-checkout", "user-42")
 // Always enable for a company email domain
 store.AddRule("new-checkout", flags.Rule{Attribute: "email", Operator: flags.OpEndsWith, Values: []string{"@acme.com"}})
 store.Evaluate("new-checkout", flags.Context{UserID: "u1", Attributes: map[string]string{"email": "a@acme.com"}}) // true
+
+// Independent environments
+envs := flags.NewEnvironments()
+dev, _ := envs.Env(flags.EnvDev)
+dev.Create("new-checkout", true)
+envs.Promote("new-checkout", flags.EnvDev, flags.EnvProd)
 ```
 
 ## Run the demo
