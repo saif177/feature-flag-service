@@ -6,7 +6,7 @@ Incremental features, roughly in order. Pick the next unchecked item each sessio
 - [x] Percentage-based rollouts (flag enabled for X% of evaluations, consistent per user ID)
 - [x] Targeting rules (enable for specific user IDs / attributes, e.g. email domain)
 - [x] Multi-environment support (dev/staging/prod have independent flag states)
-- [ ] Persistence: swap in-memory store for SQLite
+- [x] Persistence: swap in-memory store for SQLite
 - [ ] HTTP API: CRUD endpoints for flags + an evaluation endpoint
 - [ ] API key auth for the HTTP API
 - [ ] Audit log (who changed what flag, when, old value -> new value)
@@ -28,3 +28,4 @@ Incremental features, roughly in order. Pick the next unchecked item each sessio
 - Day 2 (2026-10-22): percentage-based rollouts — `Flag.Rollout` (default 100), `SetRollout`, and deterministic per-user `IsEnabledFor` using an FNV hash of flag key + user ID (stable, monotonic as the percentage grows). `IsEnabled` is now true only for full rollouts.
 - Day 3 (2026-10-27): targeting rules — `Rule` (attribute + operator `equals`/`ends_with`/`starts_with`/`contains` + values), `AddRule`/`ClearRules`, and `Evaluate(key, Context{UserID, Attributes})`. A matching rule turns an enabled flag on regardless of rollout (e.g. email domain, user ID allow-list); otherwise the percentage rollout applies. `IsEnabledFor` now delegates to `Evaluate`.
 - Day 4 (2026-10-29): multi-environment support — `Environments` registry holding an independent `Store` per environment (default `dev`/`staging`/`prod`, or custom names), `Env(name)`, `Names()`, and `Promote(key, from, to)` to copy a flag's enabled state, rollout and rules between environments (deep-copied so later edits don't leak).
+- Day 5 (2026-11-03): SQLite persistence — `SQLiteStore` (`OpenSQLite(path)`, pure-Go `modernc.org/sqlite`) with the same API as the in-memory `Store`, rules stored as JSON, data surviving reopen. Added a shared `FlagStore` interface and extracted `evaluateFlag` so both backends evaluate identically.

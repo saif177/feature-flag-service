@@ -126,6 +126,15 @@ func (s *Store) Evaluate(key string, ctx Context) bool {
 	if err != nil || !f.Enabled {
 		return false
 	}
+	return evaluateFlag(f, ctx)
+}
+
+// evaluateFlag applies targeting rules then the rollout to an enabled flag.
+// It is shared by every storage backend.
+func evaluateFlag(f Flag, ctx Context) bool {
+	if !f.Enabled {
+		return false
+	}
 	for _, r := range f.Rules {
 		if r.matches(ctx) {
 			return true

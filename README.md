@@ -8,6 +8,7 @@ A backend feature-flag / remote-config service, built incrementally as a daily p
 - Percentage-based rollouts: `SetRollout` + `IsEnabledFor(key, userID)` gives consistent per-user results
 - Targeting rules: `AddRule` with `equals`/`ends_with`/`starts_with`/`contains` on user ID or arbitrary attributes (e.g. email domain), evaluated via `Evaluate(key, Context{...})`
 - Multi-environment: `NewEnvironments()` gives independent dev/staging/prod stores; `Promote` copies a flag between them
+- SQLite persistence: `OpenSQLite("flags.db")` returns a `SQLiteStore` with the same API as `Store`; both satisfy `FlagStore`
 
 ## Usage
 
