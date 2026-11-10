@@ -9,6 +9,7 @@ A backend feature-flag / remote-config service, built incrementally as a daily p
 - Targeting rules: `AddRule` with `equals`/`ends_with`/`starts_with`/`contains` on user ID or arbitrary attributes (e.g. email domain), evaluated via `Evaluate(key, Context{...})`
 - Multi-environment: `NewEnvironments()` gives independent dev/staging/prod stores; `Promote` copies a flag between them
 - SQLite persistence: `OpenSQLite("flags.db")` returns a `SQLiteStore` with the same API as `Store`; both satisfy `FlagStore`
+- HTTP API: `NewServer(envs)` exposes flag CRUD and an evaluate endpoint per environment (`go run ./cmd/server`)
 
 ## Usage
 
@@ -34,6 +35,16 @@ dev, _ := envs.Env(flags.EnvDev)
 dev.Create("new-checkout", true)
 envs.Promote("new-checkout", flags.EnvDev, flags.EnvProd)
 ```
+
+## HTTP API
+
+```
+go run ./cmd/server -addr :8080
+curl -X POST localhost:8080/v1/envs/dev/flags -d '{"key":"new-checkout","enabled":true,"rollout":25}'
+curl -X POST localhost:8080/v1/envs/dev/flags/new-checkout/evaluate -d '{"user_id":"u1"}'
+```
+
+Routes: `GET/POST /v1/envs/{env}/flags`, `GET/PATCH/DELETE /v1/envs/{env}/flags/{key}`, `POST /v1/envs/{env}/flags/{key}/evaluate`.
 
 ## Run the demo
 

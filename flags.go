@@ -37,7 +37,7 @@ func (s *Store) Create(key string, enabled bool) error {
 	defer s.mu.Unlock()
 
 	if _, exists := s.flags[key]; exists {
-		return errors.New("flag already exists")
+		return ErrAlreadyExists
 	}
 	s.flags[key] = Flag{Key: key, Enabled: enabled, Rollout: 100}
 	return nil
