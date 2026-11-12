@@ -10,6 +10,7 @@ A backend feature-flag / remote-config service, built incrementally as a daily p
 - Multi-environment: `NewEnvironments()` gives independent dev/staging/prod stores; `Promote` copies a flag between them
 - SQLite persistence: `OpenSQLite("flags.db")` returns a `SQLiteStore` with the same API as `Store`; both satisfy `FlagStore`
 - HTTP API: `NewServer(envs)` exposes flag CRUD and an evaluate endpoint per environment (`go run ./cmd/server`)
+- API key auth: scoped `read`/`write` keys via `Authenticator.Middleware` (Bearer or `X-API-Key`), enabled in the server with `FLAGS_API_KEYS`
 
 ## Usage
 
@@ -45,6 +46,15 @@ curl -X POST localhost:8080/v1/envs/dev/flags/new-checkout/evaluate -d '{"user_i
 ```
 
 Routes: `GET/POST /v1/envs/{env}/flags`, `GET/PATCH/DELETE /v1/envs/{env}/flags/{key}`, `POST /v1/envs/{env}/flags/{key}/evaluate`.
+
+### Auth
+
+```
+FLAGS_API_KEYS="ci:read:abc123,admin:write:s3cret" go run ./cmd/server
+curl -H "Authorization: Bearer s3cret" localhost:8080/v1/envs/dev/flags
+```
+
+`read` keys can list/get/evaluate; `write` keys can also create/update/delete. Missing or invalid keys get 401, insufficient scope 403.
 
 ## Run the demo
 
