@@ -115,7 +115,7 @@ func requiredScope(r *http.Request) Scope {
 // the key's scope is too weak for the request.
 func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, scope, ok := a.Lookup(tokenFromRequest(r))
+		name, scope, ok := a.Lookup(tokenFromRequest(r))
 		if !ok {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="feature-flag-service"`)
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing or invalid API key"})
@@ -125,6 +125,6 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "API key is read-only"})
 			return
 		}
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(w, r.WithContext(WithActor(r.Context(), name)))
 	})
 }

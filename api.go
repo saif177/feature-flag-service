@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"sort"
+	"strconv"
 )
 
 // Server is the HTTP API over a set of environments. Routes:
@@ -15,10 +16,18 @@ import (
 //	PATCH  /v1/envs/{env}/flags/{key}              update enabled/rollout/rules
 //	DELETE /v1/envs/{env}/flags/{key}              delete a flag
 //	POST   /v1/envs/{env}/flags/{key}/evaluate     evaluate for a user context
+//	GET    /v1/envs/{env}/audit                    change history (?key=&actor=&limit=)
+//
+// Every successful create/update/delete is recorded in the server's AuditLog
+// with the authenticated key name as the actor.
 type Server struct {
 	resolve func(env string) (FlagStore, error)
 	mux     *http.ServeMux
+	audit   *AuditLog
 }
+
+// Audit returns the log of changes made through this server.
+func (s *Server) Audit() *AuditLog { return s.audit }
 
 // NewServer serves the in-memory stores held by envs.
 func NewServer(envs *Environments) *Server {
@@ -35,13 +44,14 @@ func NewServer(envs *Environments) *Server {
 // allowing any FlagStore backend (e.g. SQLiteStore). resolve must return
 // ErrUnknownEnvironment for names it doesn't know.
 func NewServerFunc(resolve func(env string) (FlagStore, error)) *Server {
-	s := &Server{resolve: resolve, mux: http.NewServeMux()}
+	s := &Server{resolve: resolve, mux: http.NewServeMux(), audit: NewAuditLog(0)}
 	s.mux.HandleFunc("GET /v1/envs/{env}/flags", s.handle(s.list))
 	s.mux.HandleFunc("POST /v1/envs/{env}/flags", s.handle(s.create))
 	s.mux.HandleFunc("GET /v1/envs/{env}/flags/{key}", s.handle(s.get))
 	s.mux.HandleFunc("PATCH /v1/envs/{env}/flags/{key}", s.handle(s.update))
 	s.mux.HandleFunc("DELETE /v1/envs/{env}/flags/{key}", s.handle(s.remove))
 	s.mux.HandleFunc("POST /v1/envs/{env}/flags/{key}/evaluate", s.handle(s.evaluate))
+	s.mux.HandleFunc("GET /v1/envs/{env}/audit", s.handle(s.auditList))
 	return s
 }
 
@@ -199,6 +209,7 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request, st FlagStore) er
 			return err
 		}
 	}
+	s.recordChange(r, ActionCreate, req.Key, nil, st)
 	return s.respondFlag(w, st, req.Key, http.StatusCreated)
 }
 
@@ -221,7 +232,8 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request, st FlagStore) er
 	if err := decode(w, r, &req); err != nil {
 		return err
 	}
-	if _, err := st.Get(key); err != nil {
+	before, err := st.Get(key)
+	if err != nil {
 		return err
 	}
 	// Validate everything up front so a bad request changes nothing.
@@ -253,13 +265,20 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request, st FlagStore) er
 			}
 		}
 	}
+	s.recordChange(r, ActionUpdate, key, &before, st)
 	return s.respondFlag(w, st, key, http.StatusOK)
 }
 
 func (s *Server) remove(w http.ResponseWriter, r *http.Request, st FlagStore) error {
-	if err := st.Delete(r.PathValue("key")); err != nil {
+	key := r.PathValue("key")
+	before, err := st.Get(key)
+	if err != nil {
 		return err
 	}
+	if err := st.Delete(key); err != nil {
+		return err
+	}
+	s.recordChange(r, ActionDelete, key, &before, st)
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
@@ -275,5 +294,32 @@ func (s *Server) evaluate(w http.ResponseWriter, r *http.Request, st FlagStore) 
 	}
 	on := st.Evaluate(key, Context{UserID: req.UserID, Attributes: req.Attributes})
 	writeJSON(w, http.StatusOK, map[string]any{"key": key, "enabled": on})
+	return nil
+}
+
+// recordChange logs a change to key. old is the state before (nil for
+// creates); the after state is read back from st (nil if the flag is gone).
+func (s *Server) recordChange(r *http.Request, action, key string, old *Flag, st FlagStore) {
+	var after *Flag
+	if f, err := st.Get(key); err == nil {
+		after = &f
+	}
+	s.audit.Record(ActorFrom(r.Context()), r.PathValue("env"), key, action, old, after)
+}
+
+func (s *Server) auditList(w http.ResponseWriter, r *http.Request, _ FlagStore) error {
+	q := AuditQuery{
+		Env:   r.PathValue("env"),
+		Key:   r.URL.Query().Get("key"),
+		Actor: r.URL.Query().Get("actor"),
+	}
+	if v := r.URL.Query().Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			return &apiError{http.StatusBadRequest, "limit must be a positive integer"}
+		}
+		q.Limit = n
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"entries": s.audit.Query(q)})
 	return nil
 }

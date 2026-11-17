@@ -11,6 +11,7 @@ A backend feature-flag / remote-config service, built incrementally as a daily p
 - SQLite persistence: `OpenSQLite("flags.db")` returns a `SQLiteStore` with the same API as `Store`; both satisfy `FlagStore`
 - HTTP API: `NewServer(envs)` exposes flag CRUD and an evaluate endpoint per environment (`go run ./cmd/server`)
 - API key auth: scoped `read`/`write` keys via `Authenticator.Middleware` (Bearer or `X-API-Key`), enabled in the server with `FLAGS_API_KEYS`
+- Audit log: every API change is recorded (actor, time, old/new state), queryable at `GET /v1/envs/{env}/audit`
 
 ## Usage
 
@@ -45,7 +46,7 @@ curl -X POST localhost:8080/v1/envs/dev/flags -d '{"key":"new-checkout","enabled
 curl -X POST localhost:8080/v1/envs/dev/flags/new-checkout/evaluate -d '{"user_id":"u1"}'
 ```
 
-Routes: `GET/POST /v1/envs/{env}/flags`, `GET/PATCH/DELETE /v1/envs/{env}/flags/{key}`, `POST /v1/envs/{env}/flags/{key}/evaluate`.
+Routes: `GET/POST /v1/envs/{env}/flags`, `GET/PATCH/DELETE /v1/envs/{env}/flags/{key}`, `POST /v1/envs/{env}/flags/{key}/evaluate`, `GET /v1/envs/{env}/audit` (optional `key`, `actor`, `limit` filters; newest first).
 
 ### Auth
 
