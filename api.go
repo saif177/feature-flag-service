@@ -17,6 +17,11 @@ import (
 //	DELETE /v1/envs/{env}/flags/{key}              delete a flag
 //	POST   /v1/envs/{env}/flags/{key}/evaluate     evaluate for a user context
 //	GET    /v1/envs/{env}/audit                    change history (?key=&actor=&limit=)
+//	GET    /v1/envs/{env}/webhooks                 list webhooks for an env
+//	POST   /v1/envs/{env}/webhooks                 register {url, events?, secret?, all_envs?}
+//	DELETE /v1/envs/{env}/webhooks/{id}            remove a webhook
+//
+// Registered webhooks receive a signed POST for each audited change.
 //
 // Every successful create/update/delete is recorded in the server's AuditLog
 // with the authenticated key name as the actor.
@@ -24,7 +29,12 @@ type Server struct {
 	resolve func(env string) (FlagStore, error)
 	mux     *http.ServeMux
 	audit   *AuditLog
+	hooks   *Webhooks
 }
+
+// Webhooks returns the webhook registry/dispatcher. Call Close on it when
+// shutting down to flush pending deliveries.
+func (s *Server) Webhooks() *Webhooks { return s.hooks }
 
 // Audit returns the log of changes made through this server.
 func (s *Server) Audit() *AuditLog { return s.audit }
@@ -44,7 +54,7 @@ func NewServer(envs *Environments) *Server {
 // allowing any FlagStore backend (e.g. SQLiteStore). resolve must return
 // ErrUnknownEnvironment for names it doesn't know.
 func NewServerFunc(resolve func(env string) (FlagStore, error)) *Server {
-	s := &Server{resolve: resolve, mux: http.NewServeMux(), audit: NewAuditLog(0)}
+	s := &Server{resolve: resolve, mux: http.NewServeMux(), audit: NewAuditLog(0), hooks: NewWebhooks(WebhookOptions{})}
 	s.mux.HandleFunc("GET /v1/envs/{env}/flags", s.handle(s.list))
 	s.mux.HandleFunc("POST /v1/envs/{env}/flags", s.handle(s.create))
 	s.mux.HandleFunc("GET /v1/envs/{env}/flags/{key}", s.handle(s.get))
@@ -52,6 +62,9 @@ func NewServerFunc(resolve func(env string) (FlagStore, error)) *Server {
 	s.mux.HandleFunc("DELETE /v1/envs/{env}/flags/{key}", s.handle(s.remove))
 	s.mux.HandleFunc("POST /v1/envs/{env}/flags/{key}/evaluate", s.handle(s.evaluate))
 	s.mux.HandleFunc("GET /v1/envs/{env}/audit", s.handle(s.auditList))
+	s.mux.HandleFunc("GET /v1/envs/{env}/webhooks", s.handle(s.webhookList))
+	s.mux.HandleFunc("POST /v1/envs/{env}/webhooks", s.handle(s.webhookCreate))
+	s.mux.HandleFunc("DELETE /v1/envs/{env}/webhooks/{id}", s.handle(s.webhookDelete))
 	return s
 }
 
@@ -139,7 +152,7 @@ func writeError(w http.ResponseWriter, err error) {
 		status = http.StatusNotFound
 	case errors.Is(err, ErrAlreadyExists):
 		status = http.StatusConflict
-	case errors.Is(err, ErrInvalidPercentage), errors.Is(err, ErrInvalidRule):
+	case errors.Is(err, ErrInvalidPercentage), errors.Is(err, ErrInvalidRule), errors.Is(err, ErrInvalidWebhook):
 		status = http.StatusBadRequest
 	}
 	writeJSON(w, status, map[string]string{"error": err.Error()})
@@ -304,7 +317,45 @@ func (s *Server) recordChange(r *http.Request, action, key string, old *Flag, st
 	if f, err := st.Get(key); err == nil {
 		after = &f
 	}
-	s.audit.Record(ActorFrom(r.Context()), r.PathValue("env"), key, action, old, after)
+	e := s.audit.Record(ActorFrom(r.Context()), r.PathValue("env"), key, action, old, after)
+	s.hooks.Dispatch(e)
+}
+
+type webhookRequest struct {
+	URL     string   `json:"url"`
+	Events  []string `json:"events"`
+	Secret  string   `json:"secret"`
+	AllEnvs bool     `json:"all_envs"` // deliver changes from every environment
+}
+
+func (s *Server) webhookList(w http.ResponseWriter, r *http.Request, _ FlagStore) error {
+	writeJSON(w, http.StatusOK, map[string]any{"webhooks": s.hooks.List(r.PathValue("env"))})
+	return nil
+}
+
+func (s *Server) webhookCreate(w http.ResponseWriter, r *http.Request, _ FlagStore) error {
+	var req webhookRequest
+	if err := decode(w, r, &req); err != nil {
+		return err
+	}
+	h := Webhook{URL: req.URL, Events: req.Events, Secret: req.Secret}
+	if !req.AllEnvs {
+		h.Env = r.PathValue("env")
+	}
+	h, err := s.hooks.Register(h)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusCreated, h)
+	return nil
+}
+
+func (s *Server) webhookDelete(w http.ResponseWriter, r *http.Request, _ FlagStore) error {
+	if !s.hooks.Delete(r.PathValue("id")) {
+		return ErrNotFound
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
 func (s *Server) auditList(w http.ResponseWriter, r *http.Request, _ FlagStore) error {

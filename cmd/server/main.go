@@ -22,7 +22,9 @@ func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	flag.Parse()
 
-	var handler http.Handler = flags.NewServer(flags.NewEnvironments())
+	srv := flags.NewServer(flags.NewEnvironments())
+	defer srv.Webhooks().Close()
+	var handler http.Handler = srv
 	if spec := os.Getenv("FLAGS_API_KEYS"); spec != "" {
 		keys, err := flags.ParseAPIKeys(spec)
 		if err != nil {
