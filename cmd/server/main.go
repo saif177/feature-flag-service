@@ -14,15 +14,39 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
+	"time"
 
 	flags "github.com/saif177/feature-flag-service"
 )
 
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
+	cacheTTL := flag.Duration("cache-ttl", 30*time.Second, "TTL for the evaluation cache; 0 caches until a write invalidates, negative disables")
 	flag.Parse()
 
-	srv := flags.NewServer(flags.NewEnvironments())
+	envs := flags.NewEnvironments()
+	var srv *flags.Server
+	if *cacheTTL < 0 {
+		srv = flags.NewServer(envs)
+	} else {
+		var mu sync.Mutex
+		cached := map[string]flags.FlagStore{}
+		srv = flags.NewServerFunc(func(name string) (flags.FlagStore, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			if c, ok := cached[name]; ok {
+				return c, nil
+			}
+			st, err := envs.Env(name)
+			if err != nil {
+				return nil, err
+			}
+			c := flags.NewCachedStore(st, *cacheTTL)
+			cached[name] = c
+			return c, nil
+		})
+	}
 	defer srv.Webhooks().Close()
 	var handler http.Handler = srv
 	if spec := os.Getenv("FLAGS_API_KEYS"); spec != "" {

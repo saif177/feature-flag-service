@@ -13,6 +13,7 @@ A backend feature-flag / remote-config service, built incrementally as a daily p
 - API key auth: scoped `read`/`write` keys via `Authenticator.Middleware` (Bearer or `X-API-Key`), enabled in the server with `FLAGS_API_KEYS`
 - Audit log: every API change is recorded (actor, time, old/new state), queryable at `GET /v1/envs/{env}/audit`
 - Webhooks: register URLs at `/v1/envs/{env}/webhooks` to get signed (HMAC-SHA256) `flag.changed` POSTs on every change, with async delivery and retries
+- Caching: `NewCachedStore(store, ttl)` wraps any `FlagStore` with a read-through cache, invalidated on writes; the server enables it via `-cache-ttl`
 
 ## Usage
 
