@@ -12,7 +12,7 @@ Incremental features, roughly in order. Pick the next unchecked item each sessio
 - [x] Audit log (who changed what flag, when, old value -> new value)
 - [x] Webhooks on flag change
 - [x] Caching layer for evaluation reads + invalidation on change
-- [ ] Client SDK (simple Go package wrapping the HTTP API with local caching)
+- [x] Client SDK (simple Go package wrapping the HTTP API with local caching)
 - [ ] Scheduled flag changes (enable/disable at a future timestamp)
 - [ ] Flag dependencies (flag B only evaluates if flag A is enabled)
 - [ ] Bulk import/export of flag configuration (JSON/YAML)
@@ -34,3 +34,4 @@ Incremental features, roughly in order. Pick the next unchecked item each sessio
 - Day 8 (2026-11-17): audit log — `AuditLog` (bounded, thread-safe, newest-first `Query` by env/key/actor/limit) records every successful create/update/delete made through the API with actor, timestamp and old/new flag snapshots. Auth middleware now passes the API key name via context (`WithActor`/`ActorFrom`; `anonymous` when auth is off). New `GET /v1/envs/{env}/audit?key=&actor=&limit=` (read scope).
 - Day 9 (2026-11-19): webhooks — `Webhooks` registry + async dispatcher (worker pool, bounded queue, exponential-backoff retries, optional HMAC-SHA256 `X-Flags-Signature`). Every audited create/update/delete POSTs a `flag.changed` payload to matching subscribers, filterable by env and event type. New `GET/POST /v1/envs/{env}/webhooks` and `DELETE .../webhooks/{id}` (secret never returned); URLs must be http(s).
 - Day 10 (2026-11-24): caching layer — `CachedStore` wraps any `FlagStore` with a read-through cache for flag lookups (used by `Evaluate`/`IsEnabled*`), TTL-bounded, with per-key invalidation on every write through the wrapper, race-safe fills (generation counter), defensive copies, and hit/miss/invalidation `Stats()`. `cmd/server` wraps each environment with it (`-cache-ttl`, default 30s).
+- Day 11 (2026-11-26): client SDK — new `client` package (`client.New(Options{BaseURL, Env, APIKey, TTL, StaleTTL})`) with `Enabled(ctx, key, EvalContext, default)` calling the evaluate endpoint. Results are cached per flag+user+attributes for a TTL (order-independent cache key), stale values are served when the service is unreachable (bounded by `StaleTTL`), a 404 is authoritative and returns the caller's default, plus `Invalidate`/`Flush`, `Stats()`, typed `StatusError`/`IsNotFound`, and Bearer API-key support. Tested end-to-end against the real server and auth middleware.
